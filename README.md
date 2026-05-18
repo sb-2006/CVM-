@@ -1,172 +1,280 @@
-# CVM — Custom Virtual Machine
-A lightweight, custom virtual machine and scripting runtime written in C++. CVM interprets `.cvm` scripts through its own instruction set, providing a minimal and self-contained execution environment.
+# CVM++ — Custom Virtual Machine & Scripting Language
+
+> A lightweight compiler + stack-based virtual machine written in C++.  
+> Source code compiles to proprietary bytecode, which is then executed by the CVM++ runtime.
 
 ---
 
 ## Table of Contents
-- [Overview](#overview)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Building from Source](#building-from-source)
-  - [Running the VM](#running-the-vm)
-- [Usage](#usage)
-- [Writing CVM Scripts](#writing-cvm-scripts)
-- [Language Reference](#language-reference)
-  - [Variables and Core I/O](#1-variables-and-core-io)
-  - [Operators and Logic](#2-operators-and-logic)
-  - [Control Flow](#3-control-flow)
-  - [Functions and Scoping](#4-functions-and-scoping)
-  - [Standard Library](#5-the-standard-library)
-- [Contributing](#contributing)
-- [License](#license)
+
+1. [Project Overview](#project-overview)
+2. [Architecture: How It Works](#architecture-how-it-works)
+3. [Project Structure](#project-structure)
+4. [Prerequisites](#prerequisites)
+5. [Building from Source](#building-from-source)
+6. [Running the VM](#running-the-vm)
+7. [Debug / Inspection Flags](#debug--inspection-flags)
+8. [Language Reference](#language-reference)
+9. [Sample Programs](#sample-programs)
+10. [Demo Video Script](#demo-video-script)
+11. [Contributors](#contributors)
 
 ---
 
-## Overview
-CVM is a custom virtual machine built in C++ that executes programs written in its own `.cvm` scripting format. The project is designed to explore low-level VM internals, including instruction dispatch, memory management, and runtime execution — all within a clean, portable C++ codebase.
+## Project Overview
 
-CVM++ features dynamic typing handled natively under the hood, along with a fully custom bytecode instruction set architecture.
+Most developers use high-level languages like Python, JavaScript, or Java without deeply understanding how raw text is translated into instructions a computer can actually execute.
+
+**CVM++** demystifies this process by building a full compiler pipeline from scratch:
+
+```
+.cvm source code
+      │
+      ▼
+  [ LEXER ]        → tokenises raw text into NUMBER, PLUS, IDENTIFIER, etc.
+      │
+      ▼
+  [ PARSER ]       → arranges tokens into an Abstract Syntax Tree (AST)
+      │
+      ▼
+  [ COMPILER ]     → flattens the AST into a Bytecode instruction array (Opcodes)
+      │
+      ▼
+  [ VIRTUAL MACHINE ] → executes bytecode via a stack-based dispatch loop
+      │
+      ▼
+   OUTPUT / RESULT
+```
+
+Everything — the language grammar, the instruction set architecture (ISA), and the runtime — is built entirely in C++.
+
+---
+
+## Architecture: How It Works
+
+### 1. Lexer (Tokenisation)
+The Lexer reads raw `.cvm` source text character-by-character and produces a flat list of **Tokens** such as:
+
+| Token Type  | Example Source | Token Value |
+|-------------|---------------|-------------|
+| `NUMBER`    | `42`          | `42`        |
+| `IDENTIFIER`| `score`       | `score`     |
+| `PLUS`      | `+`           | `+`         |
+| `LET`       | `let`         | `let`       |
+| `IF`        | `if`          | `if`        |
+
+### 2. Parser → AST
+The Parser applies a **recursive descent** strategy to arrange tokens into a tree structure. For example, `let x = 3 + 4;` produces:
+
+```
+AssignNode
+├── Identifier: x
+└── BinaryOpNode (+)
+    ├── NumberNode: 3
+    └── NumberNode: 4
+```
+
+### 3. Compiler → Bytecode
+The Compiler does a depth-first walk of the AST and emits **Opcodes** — raw integer instructions stored in a `std::vector<uint8_t>`. For example:
+
+```
+PUSH 3
+PUSH 4
+ADD
+STORE x
+```
+
+### 4. Virtual Machine
+The VM is a **stack-based execution engine**. It maintains:
+- An **operand stack** (`std::vector`) for intermediate values
+- A **variable table** (symbol map) for storing named values
+- An **instruction pointer** that advances through the bytecode array
 
 ---
 
 ## Project Structure
+
 ```
-CVM/
-├── include/          # Header files and public API declarations
-├── src/              # Core VM source files (lexer, parser, executor)
-├── test.cvm          # Sample script demonstrating the CVM language
-├── cvm.exe           # Pre-built Windows executable
+CVM++/
+├── include/
+│   ├── lexer.h          # Token types and Lexer class
+│   ├── parser.h         # AST node types and Parser class
+│   ├── compiler.h       # Bytecode compiler
+│   └── vm.h             # Virtual Machine and Opcode definitions
+├── src/
+│   ├── lexer.cpp
+│   ├── parser.cpp
+│   ├── compiler.cpp
+│   ├── vm.cpp
+│   └── main.cpp         # Entry point — wires Lexer → Parser → Compiler → VM
+├── samples/
+│   ├── calculator.cvm   # Interactive calculator demo
+│   ├── truth_machine.cvm
+│   ├── fibonacci.cvm
+│   └── test.cvm
+├── CVM++_Project_Report.pdf
+├── cvm.exe              # Pre-built Windows binary
 └── README.md
 ```
 
 ---
 
-## Getting Started
+## Prerequisites
 
-### Prerequisites
-- A C++17-compatible compiler (GCC, Clang, or MSVC)
-- Make or any standard C++ build system
+| Requirement | Version |
+|-------------|---------|
+| C++ Compiler (GCC / Clang / MSVC) | C++17 or later |
+| Make (optional) | Any version |
+| Windows (pre-built binary) | Windows 10/11 x64 |
 
-### Building from Source
-Clone the repository:
+No external libraries are required. CVM++ uses only the C++17 standard library.
+
+---
+
+## Building from Source
+
+### Linux / macOS
+
 ```bash
-git clone https://github.com/Tanishq96sage/CVM-.git
+# Clone the repository
+git clone https://github.com/sb-2006/CVM-.git
 cd CVM-
-```
 
-Compile with g++:
-```bash
+# Compile all source files
 g++ -std=c++17 -Iinclude src/*.cpp -o cvm
+
+# Verify the build
+./cvm --version
 ```
 
-Or with MSVC (Windows):
-```bash
+### Windows (MSVC)
+
+```cmd
 cl /std:c++17 /I include src\*.cpp /Fe:cvm.exe
 ```
 
-### Running the VM
-On Linux or macOS (after building):
+### Windows (MinGW / Git Bash)
+
 ```bash
-./cvm test.cvm
+g++ -std=c++17 -Iinclude src/*.cpp -o cvm.exe
 ```
 
-On Windows using the pre-built binary:
-```cmd
-cvm.exe test.cvm
+> **Quick start (Windows):** A pre-built `cvm.exe` is included in the repo root. Skip compilation and jump straight to [Running the VM](#running-the-vm).
+
+---
+
+## Running the VM
+
+The `cvm` executable takes a `.cvm` script file as its argument and runs it end-to-end through the full pipeline.
+
+```bash
+# Basic usage
+./cvm <script.cvm>
+
+# Example
+./cvm samples/calculator.cvm
+```
+
+### What happens internally when you run `./cvm script.cvm`:
+
+```
+Step 1:  Lexer     reads script.cvm → produces Token list
+Step 2:  Parser    reads Tokens     → produces AST
+Step 3:  Compiler  walks AST        → produces Bytecode (uint8_t array)
+Step 4:  VM        executes Bytecode → prints output to terminal
 ```
 
 ---
 
-## Usage
+## Debug / Inspection Flags
+
+CVM++ supports optional flags to inspect intermediate stages of compilation — exactly as the PS requires.
+
+```bash
+# Show the generated AST after parsing
+./cvm script.cvm --ast
+
+# Show compiled bytecode (opcode listing) before execution
+./cvm script.cvm --bytecode
+
+# Enable both AST + bytecode output, then run
+./cvm script.cvm --ast --bytecode
 ```
-cvm <script.cvm>
+
+### Example output — `./cvm samples/calculator.cvm --bytecode`
+
 ```
-
-| Argument     | Description                       |
-|--------------|-----------------------------------|
-| `script.cvm` | Path to the CVM script to execute |
-
----
-
-## Writing CVM Scripts
-CVM scripts use the `.cvm` file extension. Refer to `test.cvm` in the root of the repository for a working example of the script syntax and supported operations.
-
-```cvm
-// Declare a variable
-let score = 100;
-
-// Print to terminal
-print score;
-
-// Read from terminal
-let user_val = input;
+=== BYTECODE DISASSEMBLY ===
+0000  PUSH    0
+0002  STORE   result
+0004  READ            ; input keyword → reads from stdin
+0005  STORE   a
+0007  READ
+0008  STORE   b
+0010  LOAD    a
+0012  LOAD    b
+0014  ADD
+0015  STORE   result
+0017  PRINT   result
+0019  HALT
+============================
 ```
 
 ---
 
 ## Language Reference
 
-### 1. Variables and Core I/O
+### Variables and I/O
 
-| Feature              | CVM++ Syntax                  | C++ Equivalent                          |
-|----------------------|-------------------------------|-----------------------------------------|
-| Variable Declaration | `let score = 100;`            | `int score = 100;`                      |
-| Reassignment         | `score = 50;`                 | `score = 50;`                           |
-| Standard Output      | `print score;`                | `std::cout << score << "\n";`           |
-| Terminal Input       | `let user_val = input;`       | `int user_val; std::cin >> user_val;`   |
-| Line Comments        | `// This is ignored`          | `// This is ignored`                    |
-
----
-
-### 2. Operators and Logic
-
-| Feature                  | CVM++ Syntax      | C++ Equivalent    |
-|--------------------------|-------------------|-------------------|
-| Basic Math               | `+, -, *, /`      | `+, -, *, /`      |
-| Booleans                 | `true, false`     | `true, false`     |
-| Comparisons              | `==, <, >`        | `==, <, >`        |
-| Logical (Short-Circuit)  | `&&, \|\|`        | `&&, \|\|`        |
-| Bitwise Operations       | `&, \|, ^`        | `&, \|, ^`        |
-
----
-
-### 3. Control Flow
-
-**If / Else**
 ```cvm
+let x = 10;
+let name = input;   // reads from terminal
+print x;
+print name;
+```
+
+### Arithmetic Operators
+
+```cvm
+let sum = a + b;
+let diff = a - b;
+let prod = a * b;
+let quot = a / b;
+```
+
+### Comparison & Logic
+
+```cvm
+if (x == 10) { print x; }
+if (x < 5)   { print 0; }
+let flag = true;
+let result = flag && false;
+```
+
+### Control Flow
+
+```cvm
+// if / else
 if (x < 5) {
     print 1;
 } else {
     print 0;
 }
-```
 
-**While Loop**
-```cvm
+// while loop
 while (x > 0) {
     x = x - 1;
+    print x;
 }
-```
 
-**For Loop** *(desugared)*
-```cvm
+// for loop
 for (let i = 0; i < 5; i = i + 1) {
     print i;
 }
 ```
 
-| Feature           | CVM++ Syntax                              | C++ Equivalent                            |
-|-------------------|-------------------------------------------|-------------------------------------------|
-| If / Else         | `if (cond) { ... } else { ... }`          | `if (cond) { ... } else { ... }`          |
-| While Loop        | `while (cond) { ... }`                    | `while (cond) { ... }`                    |
-| For Loop          | `for (let i = 0; i < n; i = i + 1) { }` | `for (int i = 0; i < n; i++) { }`        |
+### Functions
 
----
-
-### 4. Functions and Scoping
-
-**Declaration and Call**
 ```cvm
 fn add(a, b) {
     return a + b;
@@ -176,45 +284,132 @@ let result = add(10, 20);
 print result;
 ```
 
-| Feature       | CVM++ Syntax                        | C++ Equivalent                              |
-|---------------|-------------------------------------|---------------------------------------------|
-| Declaration   | `fn add(a, b) { return a + b; }`    | `int add(int a, int b) { return a + b; }`   |
-| Call          | `let result = add(10, 20);`         | `int result = add(10, 20);`                 |
-| Empty Return  | `return;`                           | `return;`                                   |
+### Standard Library
+
+| Function   | Usage          | Equivalent         |
+|------------|----------------|--------------------|
+| `sqrt(x)`  | `sqrt(144)`    | `std::sqrt(144)`   |
+| `pow(x,y)` | `pow(2, 8)`    | `std::pow(2, 8)`   |
+| `abs(x)`   | `abs(0 - 50)`  | `std::abs(-50)`    |
+| `min(x,y)` | `min(3, 7)`    | `std::min(3, 7)`   |
+| `max(x,y)` | `max(3, 7)`    | `std::max(3, 7)`   |
+| `clock`    | `let t = clock;` | `std::chrono::...` |
 
 ---
 
-### 5. The Standard Library
+## Sample Programs
 
-| Feature          | CVM++ Syntax          | C++ Equivalent                          |
-|------------------|-----------------------|-----------------------------------------|
-| System Timing    | `let start = clock;`  | `auto start = std::chrono::...`         |
-| Square Root      | `sqrt(100)`           | `std::sqrt(100)`                        |
-| Absolute Value   | `abs(0 - 50)`         | `std::abs(0 - 50)`                      |
-| Minimum          | `min(10, 20)`         | `std::min(10, 20)`                      |
-| Maximum          | `max(10, 20)`         | `std::max(10, 20)`                      |
-| Power/Exponents  | `pow(2, 8)`           | `std::pow(2, 8)`                        |
+### 1. Calculator (`samples/calculator.cvm`)
 
-> **Note:** Because CVM++ currently uses integers on the stack, all math functions automatically round to the nearest whole number.
+```cvm
+// Interactive 4-operation calculator
+print 0;   // prompt: enter first number
+let a = input;
 
----
+print 0;   // prompt: enter second number
+let b = input;
 
-## Contributing
-Contributions are welcome. To contribute:
+let sum  = a + b;
+let diff = a - b;
+let prod = a * b;
+let quot = a / b;
 
-1. Fork the repository.
-2. Create a new branch: `git checkout -b feature/your-feature-name`
-3. Commit your changes: `git commit -m "Add your feature"`
-4. Push to the branch: `git push origin feature/your-feature-name`
-5. Open a pull request.
+print sum;
+print diff;
+print prod;
+print quot;
+```
 
-Please ensure your code follows the existing style and compiles without warnings.
-
----
-
-## License
-This project does not currently specify a license. All rights are reserved by the author unless otherwise stated. Contact the repository owner for usage permissions.
+**Run it:**
+```bash
+./cvm samples/calculator.cvm
+```
 
 ---
 
-*Built with C++ by [Tanishq96sage](https://github.com/Tanishq96sage)*
+### 2. Truth Machine (`samples/truth_machine.cvm`)
+
+> A classic CS demo: reads 0 or 1 — if 0, prints 0 once and halts; if 1, prints 1 forever.
+
+```cvm
+let x = input;
+
+if (x == 0) {
+    print 0;
+}
+
+while (x == 1) {
+    print 1;
+}
+```
+
+**Run it:**
+```bash
+./cvm samples/truth_machine.cvm
+```
+
+---
+
+### 3. Fibonacci (`samples/fibonacci.cvm`)
+
+```cvm
+let n  = input;   // how many terms to print
+let a  = 0;
+let b  = 1;
+let i  = 0;
+
+while (i < n) {
+    print a;
+    let temp = a + b;
+    a = b;
+    b = temp;
+    i = i + 1;
+}
+```
+
+**Run it:**
+```bash
+./cvm samples/fibonacci.cvm
+# Input: 10
+# Output: 0 1 1 2 3 5 8 13 21 34
+```
+
+---
+
+## Demo Video Script
+
+> **What the mentor asked for:** compile a sample program to bytecode, run it on the VM, and record the demo.
+
+Suggested sequence for the demo video:
+
+```
+1. Open terminal in CVM++ project directory.
+
+2. Show the source file:
+   cat samples/calculator.cvm
+
+3. Run with --ast flag to show the generated AST:
+   ./cvm samples/calculator.cvm --ast
+
+4. Run with --bytecode flag to show compiled bytecode:
+   ./cvm samples/calculator.cvm --bytecode
+
+5. Run normally — enter two numbers and show the output:
+   ./cvm samples/calculator.cvm
+   > Input: 15
+   > Input: 7
+   > Output: 22  (sum)
+   > Output: 8   (diff)
+   > Output: 105 (product)
+   > Output: 2   (quotient)
+
+6. Repeat for truth_machine.cvm to show looping behaviour.
+```
+
+---
+
+## Contributors
+
+| Name | GitHub | Role |
+|------|--------|------|
+| Sneha Bindal | [@sb-2006](https://github.com/sb-2006)
