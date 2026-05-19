@@ -1,151 +1,141 @@
 #pragma once
-#include "token.h"
-#include <memory>
-#include <vector>
+#include "ast.h"
+#include <iostream>
+#include <string>
 
+class ASTPrinter {
+public:
+    void print(const std::vector<std::unique_ptr<Stmt>>& statements) {
+        std::cout << "\n=== ABSTRACT SYNTAX TREE ===\n";
+        for (const auto& stmt : statements) {
+            printStmt(stmt.get(), 0);
+        }
+        std::cout << "============================\n\n";
+    }
 
-struct Expr { virtual ~Expr() = default; };
+private:
+    std::string indent(int depth) {
+        return std::string(depth * 2, ' ');
+    }
 
-struct LiteralExpr : public Expr {
-    Token value;
-    LiteralExpr(Token value) : value(value) {}
-};
+    void printStmt(Stmt* stmt, int depth) {
+        if (auto* s = dynamic_cast<PrintStmt*>(stmt)) {
+            std::cout << indent(depth) << "[PrintStmt]\n";
+            printExpr(s->expression.get(), depth + 1);
 
-struct VariableExpr : public Expr {
-    Token name;
-    VariableExpr(Token name) : name(name) {}
-};
+        } else if (auto* s = dynamic_cast<VarDeclStmt*>(stmt)) {
+            std::cout << indent(depth) << "[VarDecl] name=" << s->name.lexeme << "\n";
+            printExpr(s->initializer.get(), depth + 1);
 
-struct AssignExpr : public Expr {
-    Token name;
-    std::unique_ptr<Expr> value;
-    AssignExpr(Token name, std::unique_ptr<Expr> value) : name(name), value(std::move(value)) {}
-};
+        } else if (auto* s = dynamic_cast<ExprStmt*>(stmt)) {
+            std::cout << indent(depth) << "[ExprStmt]\n";
+            printExpr(s->expression.get(), depth + 1);
 
-struct BinaryExpr : public Expr {
-    std::unique_ptr<Expr> left;
-    Token op;
-    std::unique_ptr<Expr> right;
-    BinaryExpr(std::unique_ptr<Expr> left, Token op, std::unique_ptr<Expr> right)
-        : left(std::move(left)), op(op), right(std::move(right)) {}
-};
+        } else if (auto* s = dynamic_cast<BlockStmt*>(stmt)) {
+            std::cout << indent(depth) << "[Block]\n";
+            for (const auto& inner : s->statements)
+                printStmt(inner.get(), depth + 1);
 
-struct GroupingExpr : public Expr {
-    std::unique_ptr<Expr> expression;
-    GroupingExpr(std::unique_ptr<Expr> expression) : expression(std::move(expression)) {}
-};
+        } else if (auto* s = dynamic_cast<IfStmt*>(stmt)) {
+            std::cout << indent(depth) << "[If]\n";
+            std::cout << indent(depth + 1) << "condition:\n";
+            printExpr(s->condition.get(), depth + 2);
+            std::cout << indent(depth + 1) << "then:\n";
+            printStmt(s->thenBranch.get(), depth + 2);
+            if (s->elseBranch) {
+                std::cout << indent(depth + 1) << "else:\n";
+                printStmt(s->elseBranch.get(), depth + 2);
+            }
 
-struct InputExpr : public Expr { InputExpr() = default; };
+        } else if (auto* s = dynamic_cast<WhileStmt*>(stmt)) {
+            std::cout << indent(depth) << "[While]\n";
+            std::cout << indent(depth + 1) << "condition:\n";
+            printExpr(s->condition.get(), depth + 2);
+            std::cout << indent(depth + 1) << "body:\n";
+            printStmt(s->body.get(), depth + 2);
 
-struct ClockExpr : public Expr { ClockExpr() = default; };
+        } else if (auto* s = dynamic_cast<FunctionDeclStmt*>(stmt)) {
+            std::cout << indent(depth) << "[FunctionDecl] name=" << s->name.lexeme << " params=(";
+            for (size_t i = 0; i < s->parameters.size(); i++) {
+                if (i > 0) std::cout << ", ";
+                std::cout << s->parameters[i].lexeme;
+            }
+            std::cout << ")\n";
+            for (const auto& bodyStmt : s->body)
+                printStmt(bodyStmt.get(), depth + 1);
 
-struct BuiltinUnaryExpr : public Expr {
-    Token functionName;
-    std::unique_ptr<Expr> argument;
-    BuiltinUnaryExpr(Token functionName, std::unique_ptr<Expr> argument)
-        : functionName(functionName), argument(std::move(argument)) {}
-};
+        } else if (auto* s = dynamic_cast<ReturnStmt*>(stmt)) {
+            std::cout << indent(depth) << "[Return]\n";
+            if (s->value) printExpr(s->value.get(), depth + 1);
 
-struct CallExpr : public Expr {
-    Token calleeName;
-    std::vector<std::unique_ptr<Expr>> arguments;
-    CallExpr(Token calleeName, std::vector<std::unique_ptr<Expr>> arguments)
-        : calleeName(calleeName), arguments(std::move(arguments)) {}
-};
+        } else {
+            std::cout << indent(depth) << "[UnknownStmt]\n";
+        }
+    }
 
+    void printExpr(Expr* expr, int depth) {
+        if (auto* e = dynamic_cast<LiteralExpr*>(expr)) {
+            std::cout << indent(depth) << "[Literal] " << e->value.lexeme << "\n";
 
-struct BuiltinBinaryExpr : public Expr {
-    Token functionName;
-    std::unique_ptr<Expr> left;
-    std::unique_ptr<Expr> right;
-    BuiltinBinaryExpr(Token functionName, std::unique_ptr<Expr> left, std::unique_ptr<Expr> right)
-        : functionName(functionName), left(std::move(left)), right(std::move(right)) {}
-};
+        } else if (auto* e = dynamic_cast<VariableExpr*>(expr)) {
+            std::cout << indent(depth) << "[Variable] " << e->name.lexeme << "\n";
 
-struct ArrayExpr : public Expr {
-    std::vector<std::unique_ptr<Expr>> elements;
-    ArrayExpr(std::vector<std::unique_ptr<Expr>> elements) : elements(std::move(elements)) {}
-};
+        } else if (auto* e = dynamic_cast<AssignExpr*>(expr)) {
+            std::cout << indent(depth) << "[Assign] " << e->name.lexeme << " =\n";
+            printExpr(e->value.get(), depth + 1);
 
+        } else if (auto* e = dynamic_cast<BinaryExpr*>(expr)) {
+            std::cout << indent(depth) << "[Binary] op=" << e->op.lexeme << "\n";
+            printExpr(e->left.get(),  depth + 1);
+            printExpr(e->right.get(), depth + 1);
 
-struct IndexGetExpr : public Expr {
-    std::unique_ptr<Expr> target;
-    std::unique_ptr<Expr> index;
-    IndexGetExpr(std::unique_ptr<Expr> target, std::unique_ptr<Expr> index)
-        : target(std::move(target)), index(std::move(index)) {}
-};
+        } else if (auto* e = dynamic_cast<LogicalExpr*>(expr)) {
+            std::cout << indent(depth) << "[Logical] op=" << e->op.lexeme << "\n";
+            printExpr(e->left.get(),  depth + 1);
+            printExpr(e->right.get(), depth + 1);
 
+        } else if (auto* e = dynamic_cast<GroupingExpr*>(expr)) {
+            std::cout << indent(depth) << "[Grouping]\n";
+            printExpr(e->expression.get(), depth + 1);
 
-struct IndexSetExpr : public Expr {
-    std::unique_ptr<Expr> target;
-    std::unique_ptr<Expr> index;
-    std::unique_ptr<Expr> value;
-    IndexSetExpr(std::unique_ptr<Expr> target, std::unique_ptr<Expr> index, std::unique_ptr<Expr> value)
-        : target(std::move(target)), index(std::move(index)), value(std::move(value)) {}
-};
+        } else if (dynamic_cast<InputExpr*>(expr)) {
+            std::cout << indent(depth) << "[Input]\n";
 
+        } else if (dynamic_cast<ClockExpr*>(expr)) {
+            std::cout << indent(depth) << "[Clock]\n";
 
-struct Stmt { virtual ~Stmt() = default; };
+        } else if (auto* e = dynamic_cast<BuiltinUnaryExpr*>(expr)) {
+            std::cout << indent(depth) << "[BuiltinUnary] fn=" << e->functionName.lexeme << "\n";
+            printExpr(e->argument.get(), depth + 1);
 
-struct PrintStmt : public Stmt {
-    std::unique_ptr<Expr> expression;
-    PrintStmt(std::unique_ptr<Expr> expression) : expression(std::move(expression)) {}
-};
+        } else if (auto* e = dynamic_cast<BuiltinBinaryExpr*>(expr)) {
+            std::cout << indent(depth) << "[BuiltinBinary] fn=" << e->functionName.lexeme << "\n";
+            printExpr(e->left.get(),  depth + 1);
+            printExpr(e->right.get(), depth + 1);
 
-struct FunctionDeclStmt : public Stmt {
-    Token name;
-    std::vector<Token> parameters;
-    std::vector<std::unique_ptr<Stmt>> body;
-    FunctionDeclStmt(Token name, std::vector<Token> parameters, std::vector<std::unique_ptr<Stmt>> body)
-        : name(name), parameters(parameters), body(std::move(body)) {}
-};
+        } else if (auto* e = dynamic_cast<CallExpr*>(expr)) {
+            std::cout << indent(depth) << "[Call] fn=" << e->calleeName.lexeme << " args=" << e->arguments.size() << "\n";
+            for (const auto& arg : e->arguments)
+                printExpr(arg.get(), depth + 1);
 
-struct ReturnStmt : public Stmt {
-    Token keyword;
-    std::unique_ptr<Expr> value; 
-    ReturnStmt(Token keyword, std::unique_ptr<Expr> value)
-        : keyword(keyword), value(std::move(value)) {}
-};
+        } else if (auto* e = dynamic_cast<ArrayExpr*>(expr)) {
+            std::cout << indent(depth) << "[Array] size=" << e->elements.size() << "\n";
+            for (const auto& el : e->elements)
+                printExpr(el.get(), depth + 1);
 
-struct ExprStmt : public Stmt {
-    std::unique_ptr<Expr> expression;
-    ExprStmt(std::unique_ptr<Expr> expression) : expression(std::move(expression)) {}
-};
+        } else if (auto* e = dynamic_cast<IndexGetExpr*>(expr)) {
+            std::cout << indent(depth) << "[IndexGet]\n";
+            printExpr(e->target.get(), depth + 1);
+            printExpr(e->index.get(),  depth + 1);
 
-struct VarDeclStmt : public Stmt {
-    Token name;
-    std::unique_ptr<Expr> initializer;
-    VarDeclStmt(Token name, std::unique_ptr<Expr> initializer)
-        : name(name), initializer(std::move(initializer)) {}
-};
+        } else if (auto* e = dynamic_cast<IndexSetExpr*>(expr)) {
+            std::cout << indent(depth) << "[IndexSet]\n";
+            printExpr(e->target.get(), depth + 1);
+            printExpr(e->index.get(),  depth + 1);
+            printExpr(e->value.get(),  depth + 1);
 
-
-struct BlockStmt : public Stmt {
-    std::vector<std::unique_ptr<Stmt>> statements;
-    BlockStmt(std::vector<std::unique_ptr<Stmt>> statements) : statements(std::move(statements)) {}
-};
-
-
-struct IfStmt : public Stmt {
-    std::unique_ptr<Expr> condition;
-    std::unique_ptr<Stmt> thenBranch;
-    std::unique_ptr<Stmt> elseBranch; 
-    IfStmt(std::unique_ptr<Expr> condition, std::unique_ptr<Stmt> thenBranch, std::unique_ptr<Stmt> elseBranch)
-        : condition(std::move(condition)), thenBranch(std::move(thenBranch)), elseBranch(std::move(elseBranch)) {}
-};
-
-
-struct WhileStmt : public Stmt {
-    std::unique_ptr<Expr> condition;
-    std::unique_ptr<Stmt> body;
-    WhileStmt(std::unique_ptr<Expr> condition, std::unique_ptr<Stmt> body)
-        : condition(std::move(condition)), body(std::move(body)) {}
-};
-
-struct LogicalExpr : public Expr {
-    std::unique_ptr<Expr> left;
-    Token op;
-    std::unique_ptr<Expr> right;
-    LogicalExpr(std::unique_ptr<Expr> left, Token op, std::unique_ptr<Expr> right)
-        : left(std::move(left)), op(op), right(std::move(right)) {}
+        } else {
+            std::cout << indent(depth) << "[UnknownExpr]\n";
+        }
+    }
 };
